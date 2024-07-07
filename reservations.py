@@ -15,34 +15,29 @@ def create_reservation(db_path, reservation_owner, reservation_start_date, reser
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
+    check_conflict_sql = '''
+    SELECT * FROM Reservations
+    WHERE (reservation_start_date <= ? AND reservation_end_date >= ?)
+    AND (room_id = ? OR bed_id = ?);
+    '''
+
     insert_reservation_sql = '''
     INSERT INTO Reservations (reservation_owner, reservation_start_date, reservation_end_date, room_id, bed_id)
     VALUES (?, ?, ?, ?, ?);
     '''
 
-    if room_id:
-        update_room_status_sql = '''
-        UPDATE Rooms
-        SET is_occupied = 1
-        WHERE room_id = ?;
-        '''
-    elif bed_id:
-        update_bed_status_sql = '''
-        UPDATE Beds
-        SET is_occupied = 1
-        WHERE bed_id = ?;
-        '''
-
     try:
-        cur.execute(insert_reservation_sql, (reservation_owner, reservation_start_date, reservation_end_date, room_id, bed_id))
-        
-        if room_id:
-            cur.execute(update_room_status_sql, (room_id,))
-        elif bed_id:
-            cur.execute(update_bed_status_sql, (bed_id,))
+        # Verificar si hay conflictos de fechas
+        cur.execute(check_conflict_sql, (reservation_end_date, reservation_start_date, room_id, bed_id))
+        conflicts = cur.fetchall()
 
+        if conflicts:
+            print("Error: La habitación o cama ya está reservada para las fechas seleccionadas.")
+            return
+
+        cur.execute(insert_reservation_sql, (reservation_owner, reservation_start_date, reservation_end_date, room_id, bed_id))
         conn.commit()
-        print("Reservation added and room/bed status updated successfully!")
+        print("Reservation added successfully!")
     except sqlite3.Error as e:
         print(f"An error occurred: {e}")
     finally:
